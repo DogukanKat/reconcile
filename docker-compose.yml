@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16.4
+    container_name: reconcile-postgres
+    environment:
+      POSTGRES_DB: reconcile
+      POSTGRES_USER: reconcile
+      POSTGRES_PASSWORD: reconcile
+    ports:
+      - "5432:5432"
+    # wal_level=logical is required by Debezium's logical replication.
+    # Debezium isn't wired yet (that's a later turn in Phase 1), but
+    # enabling it here costs nothing and saves a "why isn't replication
+    # working" afternoon later.
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
