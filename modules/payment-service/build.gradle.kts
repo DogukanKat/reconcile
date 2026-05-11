@@ -6,7 +6,7 @@ plugins {
 
 dependencies {
     implementation(libs.spring.boot.starter.web)
-    implementation(libs.spring.boot.starter.data.jpa)
+    implementation(libs.spring.boot.starter.jdbc)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.postgres.jdbc)
     implementation(libs.flyway.core)
