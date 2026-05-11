@@ -87,3 +87,38 @@ dependencies are still in `libs.versions.toml`; CI on a Linux daemon
 won't hit this version-negotiation wall and `@Testcontainers` is
 still the right tool there. Re-enabling it locally, once the gap
 closes, is one annotation flip plus the container boilerplate.
+
+## 2026-05-12 — Docker Desktop socket layering investigation
+
+Came back the next day to take another swing at this, narrower
+hypothesis: `~/.testcontainers.properties` is a config path that
+Testcontainers reads directly (not via env or system properties).
+Wrote:
+
+```
+docker.host=unix:///Users/kadogukan/Library/Containers/com.docker.docker/Data/docker.raw.sock
+docker.api.version=1.41
+```
+
+Result is mixed and worth recording. `docker.host` did get picked
+up — `EnvironmentAndSystemPropertyClientProviderStrategy` connected
+to `docker.raw.sock` (the real daemon, not the CLI relay), and the
+error mode flipped from "stub /info body" to "client version 1.32
+is too old. Minimum supported API version is 1.40". So the daemon
+sees the client now. But `docker.api.version=1.41` did not move the
+needle — the request still goes out as `/v1.32/info`. The key name
+is probably wrong (testcontainers' docs are quiet about this) or
+docker-java's `DefaultDockerClientConfig` is ignoring this slot of
+the properties file by design.
+
+The other two strategies (`UnixSocketClientProviderStrategy`,
+`DockerDesktopClientProviderStrategy`) kept hitting
+`~/.docker/run/docker.sock`, which is still the CLI relay, and
+still returns the stub body that probe rejects.
+
+Net: I now know two of the three pieces and I'm one undocumented
+property name (or one source-dive into docker-java) away from a
+clean fix. Not going to spend another turn on it; the local-Postgres
+IT keeps the test suite honest, and the day this resolves the diff
+is small (~20 lines).
+
