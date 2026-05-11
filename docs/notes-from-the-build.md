@@ -52,3 +52,25 @@ matter and I'll set it to false with the change documented.
 Smoke test passed: payment-service boots clean against Postgres,
 Flyway applies the empty V1, Hibernate stays quiet with zero
 entities. The bootstrap is real.
+
+## 2026-05-11 — Testcontainers vs Docker Desktop 4.72
+
+`AuthorizationRepositoryIT` is in the repo but `@Disabled` for now.
+Testcontainers 1.20.4 and 1.21.3 both fail to bring up a Postgres
+container against Docker Desktop 4.72 on this machine. The
+`/info` endpoint returns Status 400 with a near-empty body — every
+field zero or empty, only the `com.docker.desktop.address` label
+populated. `docker info` and `docker compose up` work fine, so the
+daemon is reachable; the docker-java client that Testcontainers
+embeds doesn't accept what the daemon is sending back to `/info`.
+
+I tried bumping testcontainers (1.20.4 → 1.20.6 → 1.21.3),
+setting DOCKER_HOST via `~/.testcontainers.properties` and via the
+Gradle test task's environment block. Same failure each time. Not
+worth burning another hour on it in this turn.
+
+The integration test is real code, written against the actual
+repository, with six round-trip scenarios. The moment the
+compatibility gap closes (Docker Desktop point release, a
+Testcontainers bump, or a tweak to the Docker context config), the
+test runs as-is — only the `@Disabled` annotation comes off.
