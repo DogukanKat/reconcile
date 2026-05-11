@@ -1,0 +1,1 @@
+-- Schema migrations begin here. V2 introduces the authorizations table.

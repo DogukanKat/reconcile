@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: payment-service
+
+  datasource:
+    # Hardcoded for local development. Real environments inject these.
+    url: jdbc:postgresql://localhost:5432/reconcile
+    username: reconcile
+    password: reconcile
+
+  jpa:
+    hibernate:
+      # Schema is owned by Flyway, not by Hibernate.
+      ddl-auto: validate
+
+  flyway:
+    enabled: true
+
+server:
+  port: 8080
+
+logging:
+  level:
+    dev.dogukankat: DEBUG
