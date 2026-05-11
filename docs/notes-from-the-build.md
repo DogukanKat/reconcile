@@ -23,3 +23,32 @@ The other three modules each get a placeholder README explaining
 why they're empty and when they'll come alive. I'd rather have
 empty modules in the right shape than a tidy single-module that
 needs reshaping in Phase 2.
+
+## 2026-05-11 — Bootstrap notes
+
+A few things I left in deliberate states. Writing them down so I
+don't pretend they were obvious later.
+
+Spring Boot's BOM manages most of the dependencies I pinned in
+`libs.versions.toml` — Postgres JDBC, Flyway, JUnit, AssertJ. The
+catalog versions are statements of intent; at runtime the BOM wins.
+I'm fine with that. The catalog still earns its keep as a visible
+declaration of what the project is built on.
+
+Dependency versions were chosen against what was current at start.
+By the time Phase 1 ships I'll re-check with a dependency report
+and bump anything that drifted.
+
+`wal_level=logical` is in the compose config but Debezium will need
+more (`max_replication_slots`, `max_wal_senders`, a publication, a
+replication slot) when it shows up. The setting that's there now is
+the smallest one that doesn't lock me out later.
+
+`spring.jpa.open-in-view` is on the default (true). It triggers a
+warning at startup. Leaving it alone until the Authorization
+aggregate arrives — that's when transaction boundaries actually
+matter and I'll set it to false with the change documented.
+
+Smoke test passed: payment-service boots clean against Postgres,
+Flyway applies the empty V1, Hibernate stays quiet with zero
+entities. The bootstrap is real.
