@@ -4,15 +4,11 @@ import dev.dogukankat.reconcile.payment.authorization.AuthorizationStatus.AuthFa
 import dev.dogukankat.reconcile.payment.authorization.AuthorizationStatus.Authorized;
 import dev.dogukankat.reconcile.payment.authorization.AuthorizationStatus.Initiated;
 
-import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.jdbc.core.simple.JdbcClient;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -22,34 +18,33 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Runs against the local Postgres started by {@code make up} on the
+ * standard {@code application.yml} datasource. Earlier turns tried
+ * Testcontainers, but Docker Desktop 4.72's daemon refuses the API
+ * version that the testcontainers/docker-java pair sends, and no
+ * env-var or system-property override moved that needle. CI on Linux
+ * doesn't hit the same wall; Testcontainers is the right tool there
+ * once we wire up the pipeline.
+ */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@Testcontainers
-@Disabled("Docker Desktop 4.72 + docker-java API: /info returns Status 400 with "
-        + "an empty body, so Testcontainers can't validate the daemon. "
-        + "Tracked in docs/notes-from-the-build.md; re-enable once "
-        + "compatibility is resolved.")
 class AuthorizationRepositoryIT {
-
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES =
-            new PostgreSQLContainer<>("postgres:16.4")
-                    .withDatabaseName("reconcile")
-                    .withUsername("test")
-                    .withPassword("test");
-
-    @DynamicPropertySource
-    static void datasourceProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-    }
 
     @Autowired
     AuthorizationRepository repository;
 
+    @Autowired
+    JdbcClient jdbc;
+
     private static final Instant T0 = Instant.parse("2026-05-11T10:00:00Z");
     private static final Instant T1 = Instant.parse("2026-05-11T10:05:00Z");
     private static final Instant EXPIRES_AT = Instant.parse("2026-05-18T10:00:00Z");
+
+    @BeforeEach
+    void wipeTables() {
+        // captures is wiped via the FK's ON DELETE CASCADE.
+        jdbc.sql("DELETE FROM authorizations").update();
+    }
 
     @Test
     void savesAndLoadsInitiatedAuthorization() {

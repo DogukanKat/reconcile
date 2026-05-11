@@ -55,22 +55,35 @@ entities. The bootstrap is real.
 
 ## 2026-05-11 — Testcontainers vs Docker Desktop 4.72
 
-`AuthorizationRepositoryIT` is in the repo but `@Disabled` for now.
-Testcontainers 1.20.4 and 1.21.3 both fail to bring up a Postgres
-container against Docker Desktop 4.72 on this machine. The
-`/info` endpoint returns Status 400 with a near-empty body — every
-field zero or empty, only the `com.docker.desktop.address` label
-populated. `docker info` and `docker compose up` work fine, so the
-daemon is reachable; the docker-java client that Testcontainers
-embeds doesn't accept what the daemon is sending back to `/info`.
+Docker Desktop 4.72 + Testcontainers 1.21.3 don't see eye to eye on
+this machine. After enough digging the root cause is specific:
+Testcontainers' embedded docker-java builds request URLs as
+`/v1.32/info`, Docker Desktop 4.72's daemon rejects any client API
+version below 1.40 with a 400, and the API version is hardcoded
+somewhere deep inside Testcontainers. DOCKER_API_VERSION env and
+docker.api.version system property were both ignored, even after
+pointing DOCKER_HOST at the raw daemon socket
+(`~/Library/Containers/com.docker.docker/Data/docker.raw.sock`).
+Bumping docker-java to 3.4.2 didn't move the default either.
 
-I tried bumping testcontainers (1.20.4 → 1.20.6 → 1.21.3),
-setting DOCKER_HOST via `~/.testcontainers.properties` and via the
-Gradle test task's environment block. Same failure each time. Not
-worth burning another hour on it in this turn.
+Things worth remembering for next time:
 
-The integration test is real code, written against the actual
-repository, with six round-trip scenarios. The moment the
-compatibility gap closes (Docker Desktop point release, a
-Testcontainers bump, or a tweak to the Docker context config), the
-test runs as-is — only the `@Disabled` annotation comes off.
+- `~/.docker/run/docker.sock` is a CLI relay; the real daemon socket
+  is `docker.raw.sock`. The CLI relay returns a near-empty stub
+  `/info` body that doesn't even reach the API-version check.
+- A clean override probably needs Testcontainers ≥ 1.22 (if the
+  default has been raised there) or a code-level injection that
+  bypasses the default `DockerClientFactory`. Neither is worth a
+  turn at this stage.
+
+What I did instead: rewrote `AuthorizationRepositoryIT` to bind
+against the local Postgres that `make up` brings up. It autowires
+the `JdbcClient` and truncates the authorizations table in
+`@BeforeEach` (captures cascade). All six round-trip scenarios run
+and pass with `./gradlew test` as long as the local Postgres is up.
+
+The testcontainers-postgresql / testcontainers-junit-jupiter
+dependencies are still in `libs.versions.toml`; CI on a Linux daemon
+won't hit this version-negotiation wall and `@Testcontainers` is
+still the right tool there. Re-enabling it locally, once the gap
+closes, is one annotation flip plus the container boilerplate.

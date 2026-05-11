@@ -19,10 +19,4 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
-    // Help Testcontainers find Docker Desktop's user-mode socket on macOS
-    // when /var/run/docker.sock is root-owned. No-op on Linux daemon installs.
-    val desktopSocket = file("${System.getProperty("user.home")}/.docker/run/docker.sock")
-    if (desktopSocket.exists()) {
-        environment("DOCKER_HOST", "unix://${desktopSocket.absolutePath}")
-    }
 }
