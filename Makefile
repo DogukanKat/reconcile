@@ -1,10 +1,10 @@
-.PHONY: help up down build test clean
+.PHONY: help up down build test clean register-connector connector-status
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-up: ## Start local infrastructure (Postgres)
+up: ## Start local infrastructure (Postgres + Kafka + Debezium)
 	docker-compose up -d
 
 down: ## Stop local infrastructure
@@ -18,5 +18,17 @@ test: ## Run all tests
 
 clean: ## Clean build artifacts
 	./gradlew clean
+
+register-connector: ## Register the Debezium outbox connector (idempotent)
+	@curl -sf -X POST -H "Content-Type: application/json" \
+		--data @infra/debezium/outbox-connector.json \
+		http://localhost:8083/connectors > /dev/null && echo "connector registered" \
+		|| curl -s -X PUT -H "Content-Type: application/json" \
+			--data @<(jq '.config' infra/debezium/outbox-connector.json) \
+			http://localhost:8083/connectors/payment-outbox/config \
+			| jq -r '.connector.state // "updated"'
+
+connector-status: ## Show Debezium connector status
+	@curl -s http://localhost:8083/connectors/payment-outbox/status | jq
 
 .DEFAULT_GOAL := help

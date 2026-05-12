@@ -88,6 +88,41 @@ won't hit this version-negotiation wall and `@Testcontainers` is
 still the right tool there. Re-enabling it locally, once the gap
 closes, is one annotation flip plus the container boilerplate.
 
+## 2026-05-12 — Debezium wiring
+
+Compose now brings up three containers: Postgres (already there),
+Kafka in KRaft mode (single-node, no Zookeeper), and Debezium Connect.
+Kafka's two-listener split — PLAINTEXT for inside-docker traffic on
+9092, EXTERNAL for host on 9094 — is the smallest config that lets
+both Debezium (inside the network) and any local consumer (outside)
+talk to the same broker without an advertised-listener fight.
+
+Connector config in `infra/debezium/outbox-connector.json`. Three
+choices worth recording:
+
+- `snapshot.mode: no_data` skips the initial snapshot. Phase 1 has no
+  meaningful pre-existing rows worth replaying; we start streaming
+  from the WAL position the connector grabs on first boot. Phase 2
+  retry scenarios can revisit this.
+- `EventRouter` SMT maps `aggregatetype` → topic suffix. Routing
+  template `reconcile.$${routedByValue}.v1` produces
+  `reconcile.authorization.v1` and `reconcile.refund.v1` once events
+  start flowing. Aligns with ADR-0005.
+- `table.expand.json.payload: true` unwraps the JSONB `payload`
+  column into the Kafka message value, so consumers don't have to
+  parse a JSON string inside a JSON envelope. Costs a little CPU per
+  event, buys readable downstream code.
+
+`make register-connector` is idempotent — POSTs the connector on first
+call, PUTs the config on subsequent calls. Connector ID is fixed
+(`payment-outbox`) so the Connect cluster remembers it across docker
+restarts via the `reconcile-connect-configs` topic.
+
+Open thing for later: secrets. Right now the Postgres password sits
+in the connector JSON in cleartext. Fine for local dev, ugly for any
+shared environment. Debezium supports config providers; the upgrade
+is one block in the Connect config.
+
 ## 2026-05-12 — Docker Desktop socket layering investigation
 
 Came back the next day to take another swing at this, narrower
