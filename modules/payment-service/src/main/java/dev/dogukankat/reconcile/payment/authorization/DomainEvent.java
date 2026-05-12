@@ -6,6 +6,14 @@ public sealed interface DomainEvent {
 
     Instant occurredAt();
 
+    /**
+     * Every Phase 1 domain event belongs to an authorization aggregate
+     * (captures and refunds-against-captures included). Declaring this
+     * here lets the outbox writer pull the partition key without a
+     * sealed switch on the event type.
+     */
+    AuthorizationId authorizationId();
+
     record PaymentAuthorized(
             AuthorizationId authorizationId,
             MerchantId merchantId,
