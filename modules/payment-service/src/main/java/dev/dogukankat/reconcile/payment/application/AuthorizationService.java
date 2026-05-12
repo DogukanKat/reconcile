@@ -91,6 +91,29 @@ public class AuthorizationService {
         return authorizations.findById(id).map(AuthorizationView::from);
     }
 
+    @Transactional(readOnly = true)
+    public java.util.List<AuthorizationId> findExpiredAuthorized(Instant cutoff) {
+        return authorizations.findExpiredAuthorizedBefore(cutoff);
+    }
+
+    /**
+     * Expires a single overdue authorization in its own transaction.
+     * Called by the scheduler row-by-row so one bad authorization
+     * doesn't roll back the whole batch. No idempotency record — this
+     * is server-driven, not a client retry path.
+     */
+    @Transactional
+    public void expireAuthorization(AuthorizationId id, Instant now) {
+        Authorization auth = authorizations.findById(id)
+                .orElseThrow(() -> new IllegalStateException(
+                        "authorization not found at expire time: " + id.value()));
+        AuthorizationResult result = auth.expire(now);
+        authorizations.save(result.next());
+        for (DomainEvent event : result.events()) {
+            outbox.publish(event);
+        }
+    }
+
     private ServiceResult doAuthorize(AuthorizeCommand command, Instant now) {
         Authorization initiated = Authorization.initiate(
                 command.merchantId(), command.amount(), command.expiresAt(), now);

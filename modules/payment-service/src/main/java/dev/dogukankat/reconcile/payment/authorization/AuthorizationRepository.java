@@ -57,6 +57,25 @@ public class AuthorizationRepository {
         return Optional.of(withCaptures(a, captures));
     }
 
+    /**
+     * IDs of every authorization that's still AUTHORIZED but past its
+     * expiry timestamp. Returned in expires_at order so the oldest get
+     * expired first if the scheduler ever falls behind. No FOR UPDATE
+     * because each expireAuthorization() call takes its own row-lock
+     * via the save() path.
+     */
+    @Transactional(readOnly = true)
+    public List<AuthorizationId> findExpiredAuthorizedBefore(Instant cutoff) {
+        return jdbc.sql("""
+                        SELECT id FROM authorizations
+                        WHERE status = 'AUTHORIZED' AND expires_at < :cutoff
+                        ORDER BY expires_at
+                        """)
+                .param("cutoff", Timestamp.from(cutoff))
+                .query((rs, rowNum) -> new AuthorizationId(rs.getObject("id", UUID.class)))
+                .list();
+    }
+
     @Transactional(readOnly = true)
     public Optional<Authorization> findByCaptureId(CaptureId captureId) {
         return jdbc.sql("""
