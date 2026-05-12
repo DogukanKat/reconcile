@@ -57,6 +57,17 @@ public class AuthorizationRepository {
         return Optional.of(withCaptures(a, captures));
     }
 
+    @Transactional(readOnly = true)
+    public Optional<Authorization> findByCaptureId(CaptureId captureId) {
+        return jdbc.sql("""
+                        SELECT authorization_id FROM captures WHERE id = :captureId
+                        """)
+                .param("captureId", captureId.value())
+                .query((rs, rowNum) -> new AuthorizationId(rs.getObject("authorization_id", UUID.class)))
+                .optional()
+                .flatMap(this::findById);
+    }
+
     private void upsertAuthorization(Authorization a) {
         AuthorizationStatus s = a.status();
         String reason = (s instanceof AuthFailed af) ? af.reason() : null;

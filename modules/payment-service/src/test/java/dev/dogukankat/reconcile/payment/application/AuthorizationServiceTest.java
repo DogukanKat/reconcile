@@ -59,7 +59,7 @@ class AuthorizationServiceTest {
 
         assertThat(result).isInstanceOfSatisfying(ServiceResult.Created.class, c -> {
             assertThat(c.httpStatus()).isEqualTo(201);
-            assertThat(c.body()).contains("\"Authorized\"");
+            assertThat(c.body()).contains("\"AUTHORIZED\"");
             assertThat(c.resourceId()).isNotNull();
         });
         verify(authorizations).save(any());
