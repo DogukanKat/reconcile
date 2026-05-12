@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 import dev.dogukankat.reconcile.payment.authorization.AuthorizationId;
-import dev.dogukankat.reconcile.payment.authorization.DomainEvent.PaymentAuthorized;
+import dev.dogukankat.reconcile.payment.event.DomainEvent.PaymentAuthorized;
 import dev.dogukankat.reconcile.payment.authorization.MerchantId;
 import dev.dogukankat.reconcile.payment.authorization.Money;
 

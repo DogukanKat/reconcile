@@ -3,7 +3,7 @@ package dev.dogukankat.reconcile.payment.outbox;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import dev.dogukankat.reconcile.payment.authorization.DomainEvent;
+import dev.dogukankat.reconcile.payment.event.DomainEvent;
 
 import org.springframework.stereotype.Component;
 
@@ -18,8 +18,6 @@ import java.util.UUID;
 @Component
 public class OutboxWriter {
 
-    private static final String AUTHORIZATION_AGGREGATE = "authorization";
-
     private final OutboxRepository repository;
     private final ObjectMapper objectMapper;
 
@@ -32,7 +30,7 @@ public class OutboxWriter {
         String payload = serialize(event);
         OutboxEntry entry = new OutboxEntry(
                 UUID.randomUUID(),
-                AUTHORIZATION_AGGREGATE,
+                event.aggregateType(),
                 event.authorizationId().value(),
                 event.getClass().getSimpleName(),
                 payload,

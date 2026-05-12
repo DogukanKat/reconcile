@@ -5,11 +5,11 @@ import dev.dogukankat.reconcile.payment.authorization.AuthorizationStatus.Author
 import dev.dogukankat.reconcile.payment.authorization.AuthorizationStatus.Expired;
 import dev.dogukankat.reconcile.payment.authorization.AuthorizationStatus.Initiated;
 import dev.dogukankat.reconcile.payment.authorization.AuthorizationStatus.Voided;
-import dev.dogukankat.reconcile.payment.authorization.DomainEvent.AuthorizationExpired;
-import dev.dogukankat.reconcile.payment.authorization.DomainEvent.AuthorizationFailed;
-import dev.dogukankat.reconcile.payment.authorization.DomainEvent.AuthorizationVoided;
-import dev.dogukankat.reconcile.payment.authorization.DomainEvent.PaymentAuthorized;
-import dev.dogukankat.reconcile.payment.authorization.DomainEvent.PaymentCaptured;
+import dev.dogukankat.reconcile.payment.event.DomainEvent.AuthorizationExpired;
+import dev.dogukankat.reconcile.payment.event.DomainEvent.AuthorizationFailed;
+import dev.dogukankat.reconcile.payment.event.DomainEvent.AuthorizationVoided;
+import dev.dogukankat.reconcile.payment.event.DomainEvent.PaymentAuthorized;
+import dev.dogukankat.reconcile.payment.event.DomainEvent.PaymentCaptured;
 
 import org.junit.jupiter.api.Test;
 

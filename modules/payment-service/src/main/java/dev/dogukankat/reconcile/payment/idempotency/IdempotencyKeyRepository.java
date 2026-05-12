@@ -83,7 +83,7 @@ public class IdempotencyKeyRepository {
                         UPDATE idempotency_keys
                         SET status = 'COMPLETED',
                             response_status = :responseStatus,
-                            response_body = CAST(:responseBody AS JSONB),
+                            response_body = :responseBody,
                             resource_id = :resourceId,
                             completed_at = :completedAt
                         WHERE merchant_id = :merchantId

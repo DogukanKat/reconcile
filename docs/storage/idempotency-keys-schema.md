@@ -11,7 +11,7 @@ CREATE TABLE idempotency_keys (
   request_hash    CHAR(64)     NOT NULL,
   status          VARCHAR(20)  NOT NULL,
   response_status SMALLINT,
-  response_body   JSONB,
+  response_body   TEXT,
   resource_id     UUID,
   created_at      TIMESTAMPTZ  NOT NULL,
   completed_at    TIMESTAMPTZ,
@@ -39,8 +39,12 @@ CREATE INDEX idx_idempotency_keys_created_at
   a schema migration.
 - `response_status` — SMALLINT, the HTTP status code of the cached
   response.
-- `response_body` — JSONB, the cached response body for bit-for-bit
-  replay.
+- `response_body` — TEXT, the cached response body, stored as an
+  opaque blob. The original V3 migration used JSONB; a later
+  integration test caught Postgres normalizing key order and
+  whitespace on round-trip, which would break the bit-for-bit
+  replay contract from ADR-0006. V5 alters the column to TEXT so
+  bytes go out the same way they came in.
 - `resource_id` — UUID pointing to the created `authorizationId`,
   `captureId`, or `refundId`. Nullable while the request is
   `IN_PROGRESS`.
