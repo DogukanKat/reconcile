@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: notification-service
+  kafka:
+    # localhost:9094 is the EXTERNAL listener exposed by the Kafka
+    # container; inside docker the broker uses kafka:9092. Run this
+    # process on the host and you reach the same broker through 9094.
+    bootstrap-servers: localhost:9094
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+
+logging:
+  level:
+    dev.dogukankat: DEBUG
+    org.apache.kafka: WARN
