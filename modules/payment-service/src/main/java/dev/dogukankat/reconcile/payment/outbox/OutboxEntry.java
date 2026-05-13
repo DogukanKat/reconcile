@@ -9,6 +9,10 @@ import java.util.UUID;
  * Debezium-friendly column names; aggregateType / aggregateId /
  * eventType stay camelCase in Java because that's idiomatic, and the
  * repository maps to the database casing on the way in and out.
+ *
+ * {@code correlationId} is nullable on purpose: server-initiated
+ * events (e.g. the expiry scheduler) run outside any HTTP request and
+ * therefore have no correlation context.
  */
 public record OutboxEntry(
         UUID id,
@@ -16,7 +20,8 @@ public record OutboxEntry(
         UUID aggregateId,
         String eventType,
         String payload,
-        Instant occurredAt) {
+        Instant occurredAt,
+        String correlationId) {
 
     public OutboxEntry {
         Objects.requireNonNull(id, "id");
