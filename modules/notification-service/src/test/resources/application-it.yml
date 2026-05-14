@@ -1,0 +1,37 @@
+spring:
+  application:
+    name: notification-service-it
+  kafka:
+    bootstrap-servers: localhost:9094
+    consumer:
+      # Per-test consumer group so a stuck previous run doesn't poison
+      # a new test's offsets. The fault injector keys on the record key
+      # so cross-test pollution is bounded to log noise, but a clean
+      # group makes the assertions deterministic.
+      group-id: notification-service-it
+      # Skip the backlog of real authorization events sitting on the
+      # broker from earlier Debezium activity. Tests only care about
+      # the messages they publish themselves.
+      auto-offset-reset: latest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+reconcile:
+  consumer:
+    retry:
+      # Aggressive backoffs so the IT finishes under ~15s wall clock.
+      # Still exponential — keeps the test honest about the curve shape.
+      # 100ms, 200ms, 400ms → total 700ms for full retry exhaustion.
+      initial-delay: 100ms
+      multiplier: 2.0
+      max-delay: 1s
+      max-attempts: 4
+
+logging:
+  level:
+    dev.dogukankat: DEBUG
+    org.apache.kafka: WARN
+    org.springframework.kafka: INFO
