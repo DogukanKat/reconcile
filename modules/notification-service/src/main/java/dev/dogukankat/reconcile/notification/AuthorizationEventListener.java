@@ -1,14 +1,18 @@
 package dev.dogukankat.reconcile.notification;
 
+import dev.dogukankat.reconcile.notification.error.NonRetryableConsumerException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.kafka.annotation.DltHandler;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -37,8 +41,16 @@ public class AuthorizationEventListener {
             @Header(name = "correlationId", required = false) byte[] correlationId,
             @Header(KafkaHeaders.RECEIVED_KEY) String key,
             @Payload String payload) {
-        String type = eventType == null ? "?" : new String(eventType, StandardCharsets.UTF_8);
-        String outbox = outboxId == null ? "?" : new String(outboxId, StandardCharsets.UTF_8);
+        if (eventType == null) {
+            throw new NonRetryableConsumerException(
+                    "missing required header: eventType");
+        }
+        if (outboxId == null) {
+            throw new NonRetryableConsumerException(
+                    "missing required header: id");
+        }
+        String type = new String(eventType, StandardCharsets.UTF_8);
+        String outbox = new String(outboxId, StandardCharsets.UTF_8);
         boolean mdcBound = false;
         if (correlationId != null && correlationId.length > 0) {
             MDC.put(MDC_CORRELATION_ID, new String(correlationId, StandardCharsets.UTF_8));
@@ -52,5 +64,60 @@ public class AuthorizationEventListener {
                 MDC.remove(MDC_CORRELATION_ID);
             }
         }
+    }
+
+    /**
+     * Logs every record that landed on the DLT with enough metadata
+     * for a human to grep across services. This is the line that
+     * pages someone — keep it structured and grep-friendly. The DLT
+     * is terminal: nothing automatic pulls from it. Replay (if ever)
+     * is a deliberate human action documented in failure-modes.md.
+     */
+    @DltHandler
+    public void onDlt(
+            @Payload String payload,
+            @Header(KafkaHeaders.RECEIVED_KEY) String key,
+            @Header(name = KafkaHeaders.DLT_ORIGINAL_TOPIC, required = false) byte[] originalTopic,
+            @Header(name = KafkaHeaders.DLT_ORIGINAL_PARTITION, required = false) byte[] originalPartition,
+            @Header(name = KafkaHeaders.DLT_ORIGINAL_OFFSET, required = false) byte[] originalOffset,
+            @Header(name = KafkaHeaders.DLT_EXCEPTION_FQCN, required = false) byte[] exceptionFqcn,
+            @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) byte[] exceptionMessage,
+            @Header(name = "correlationId", required = false) byte[] correlationId) {
+        boolean mdcBound = false;
+        if (correlationId != null && correlationId.length > 0) {
+            MDC.put(MDC_CORRELATION_ID, new String(correlationId, StandardCharsets.UTF_8));
+            mdcBound = true;
+        }
+        try {
+            log.error(
+                    "consumer_dlt_received topic={} partition={} offset={} key={} exception={} message={} payload={}",
+                    asString(originalTopic),
+                    asInt(originalPartition),
+                    asLong(originalOffset),
+                    key,
+                    asString(exceptionFqcn),
+                    asString(exceptionMessage),
+                    payload);
+        } finally {
+            if (mdcBound) {
+                MDC.remove(MDC_CORRELATION_ID);
+            }
+        }
+    }
+
+    private static String asString(byte[] value) {
+        return value == null ? "?" : new String(value, StandardCharsets.UTF_8);
+    }
+
+    private static String asInt(byte[] value) {
+        return (value == null || value.length != Integer.BYTES)
+                ? "?"
+                : Integer.toString(ByteBuffer.wrap(value).getInt());
+    }
+
+    private static String asLong(byte[] value) {
+        return (value == null || value.length != Long.BYTES)
+                ? "?"
+                : Long.toString(ByteBuffer.wrap(value).getLong());
     }
 }
