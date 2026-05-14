@@ -54,6 +54,13 @@ public class KafkaRetryConfig {
                 // gives -retry-0, -retry-1, -retry-2 and the meaning is
                 // obvious without consulting the config.
                 .suffixTopicsWithIndexValues()
+                // Spring Kafka's @DltHandler isn't auto-discovered with the
+                // RetryTopicConfiguration bean approach — without this
+                // explicit registration, the default "log only" handler
+                // takes over and AuthorizationEventListener.onDlt never
+                // fires. The reference (bean name, method) wires the
+                // method back into the retry-topic infrastructure.
+                .dltHandlerMethod("authorizationEventListener", "onDlt")
                 .includeTopic("reconcile.authorization.v1")
                 .create(template);
     }
