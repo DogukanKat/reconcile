@@ -1,6 +1,7 @@
 package dev.dogukankat.reconcile.notification;
 
 import dev.dogukankat.reconcile.notification.error.NonRetryableConsumerException;
+import dev.dogukankat.reconcile.notification.listener.ListenerFaultInjector;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,13 +35,21 @@ public class AuthorizationEventListener {
     private static final Logger log = LoggerFactory.getLogger(AuthorizationEventListener.class);
     private static final String MDC_CORRELATION_ID = "correlationId";
 
-    @KafkaListener(topics = "reconcile.authorization.v1", groupId = "notification-service")
+    private final ListenerFaultInjector faultInjector;
+
+    public AuthorizationEventListener(ListenerFaultInjector faultInjector) {
+        this.faultInjector = faultInjector;
+    }
+
+    @KafkaListener(topics = "reconcile.authorization.v1",
+            groupId = "${reconcile.notification.consumer.group:notification-service}")
     public void onAuthorizationEvent(
             @Header(name = "eventType", required = false) byte[] eventType,
             @Header(name = "id", required = false) byte[] outboxId,
             @Header(name = "correlationId", required = false) byte[] correlationId,
             @Header(KafkaHeaders.RECEIVED_KEY) String key,
             @Payload String payload) {
+        faultInjector.onRecord(key);
         if (eventType == null) {
             throw new NonRetryableConsumerException(
                     "missing required header: eventType");
@@ -77,9 +86,9 @@ public class AuthorizationEventListener {
     public void onDlt(
             @Payload String payload,
             @Header(KafkaHeaders.RECEIVED_KEY) String key,
-            @Header(name = KafkaHeaders.DLT_ORIGINAL_TOPIC, required = false) byte[] originalTopic,
-            @Header(name = KafkaHeaders.DLT_ORIGINAL_PARTITION, required = false) byte[] originalPartition,
-            @Header(name = KafkaHeaders.DLT_ORIGINAL_OFFSET, required = false) byte[] originalOffset,
+            @Header(name = KafkaHeaders.ORIGINAL_TOPIC, required = false) byte[] originalTopic,
+            @Header(name = KafkaHeaders.ORIGINAL_PARTITION, required = false) byte[] originalPartition,
+            @Header(name = KafkaHeaders.ORIGINAL_OFFSET, required = false) byte[] originalOffset,
             @Header(name = KafkaHeaders.DLT_EXCEPTION_FQCN, required = false) byte[] exceptionFqcn,
             @Header(name = KafkaHeaders.DLT_EXCEPTION_MESSAGE, required = false) byte[] exceptionMessage,
             @Header(name = "correlationId", required = false) byte[] correlationId) {

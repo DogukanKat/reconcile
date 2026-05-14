@@ -306,3 +306,65 @@ The DLT is terminal. Nothing automatic pulls from it. Replay is a
 deliberate human action; `docs/failure-modes.md` (Feature 06) will
 spell out the playbook.
 
+## 2026-05-14 — Poison-message IT against local Kafka
+
+Picked Option B from the feature spec: real local Kafka via
+`make up`, not Testcontainers. Same pattern as the payment-service
+ITs around `cd4a681`; Testcontainers' Docker Desktop 4.72 issue is
+still open. The IT will work in CI once the workflow gains a
+`make up` step.
+
+Five things bit me writing this one. Worth keeping for next time
+anything touches retry-topic config.
+
+**Consumer group collision.** Both notification-service and
+payment-service were running locally via `bootRun` during PR
+review. The IT's listener tried to join the same
+`notification-service` consumer group and was starved of
+partitions by the live bootRun process — `getAssignedPartitions()`
+returned `[]` forever. Fix: make the listener's group ID
+configurable (`${reconcile.notification.consumer.group:...}`) and
+pin a fresh UUID per JVM in the test via
+`@DynamicPropertySource`. The static field holding the UUID is
+critical — `${random.uuid}` resolves freshly on each placeholder
+access, which would split main and retry containers into
+different groups.
+
+**RetryTopicConfigurationSupport must be a subclass, not a
+`@Bean`.** Returning the support instance from a `@Bean` method
+registers the bean but Spring Kafka's lifecycle hooks
+(`configureCustomizers`, `configureDeadLetterPublishingContainerFactory`)
+never fire on it. Solution: extend
+`RetryTopicConfigurationSupport` directly as a `@Configuration`
+class and use `@EnableKafka` instead of `@EnableKafkaRetryTopic`.
+Spring Kafka 3.x docs mention this; I missed it the first time.
+
+**RetryTopicSchedulerWrapper required after the subclass move.**
+The support subclass takes over the entire bean graph, including
+the back-off manager which needs a `TaskScheduler`. Auto-config
+no longer provides one. A `ThreadPoolTaskScheduler` with 2
+threads covers it.
+
+**`DLT_ORIGINAL_TOPIC` vs `ORIGINAL_TOPIC`.** Spring Kafka 3.x
+exposes both `kafka_dlt-original-topic` and `kafka_original-topic`
+constants. The retry-topic chain actually writes
+`kafka_original-topic` on the DLT record. Tests asserting against
+`DLT_ORIGINAL_TOPIC` silently fail with `null`. The `DLT_*`
+constants are for the classic `DefaultErrorHandler` flow, not the
+retry-topic one. Updated the listener's `@DltHandler` accordingly.
+
+**Listener exception unwrapping.** Spring Kafka stacks at least
+two framework wrappers (`ListenerExecutionFailedException` at the
+listener boundary, `TimestampedException` inside the retry-topic
+processor) around the user's exception. My custom
+`ExceptionHeadersCreator` initially wrote the wrapper's FQCN to
+the DLT header. Fix: walk the cause chain while the current
+exception's class lives in `org.springframework.kafka` and stop
+the moment we hit something outside the framework. The default
+recoverer does something similar internally; the custom path has
+to opt in.
+
+The whole IT runs in ~12 seconds wall clock against the local
+broker — three scenarios (retry-then-success, retry-exhausted,
+immediate-DLT) with aggressive backoffs in `application-it.yml`
+(100ms / x2 / 1s cap / 4 attempts).

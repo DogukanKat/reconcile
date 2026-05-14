@@ -5,6 +5,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
 import dev.dogukankat.reconcile.notification.error.NonRetryableConsumerException;
+import dev.dogukankat.reconcile.notification.listener.NoOpListenerFaultInjector;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,7 +20,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AuthorizationEventListenerTest {
 
-    private final AuthorizationEventListener listener = new AuthorizationEventListener();
+    private final AuthorizationEventListener listener =
+            new AuthorizationEventListener(new NoOpListenerFaultInjector());
     private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
     private final Logger logger =
             (Logger) LoggerFactory.getLogger(AuthorizationEventListener.class);

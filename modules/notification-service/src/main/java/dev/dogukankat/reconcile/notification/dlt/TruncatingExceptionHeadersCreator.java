@@ -47,20 +47,43 @@ public class TruncatingExceptionHeadersCreator
     public void create(Headers kafkaHeaders, Exception exception,
                        boolean isKey,
                        DeadLetterPublishingRecoverer.HeaderNames headerNames) {
-        String fqcn = exception.getClass().getName();
-        String message = exception.getMessage() == null ? "" : exception.getMessage();
-        byte[] stackBytes = truncate(stackTraceOf(exception));
+        // Unwrap the listener-method wrapper so the DLT carries the
+        // actual business exception (RetryableConsumerException /
+        // NonRetryableConsumerException) rather than the framework
+        // shell. Matches the default Spring Kafka recoverer behaviour.
+        Throwable effective = unwrap(exception);
+        String fqcn = effective.getClass().getName();
+        String message = effective.getMessage() == null ? "" : effective.getMessage();
+        byte[] stackBytes = truncate(stackTraceOf(effective));
 
         kafkaHeaders.add(KafkaHeaders.DLT_EXCEPTION_FQCN,
                 fqcn.getBytes(StandardCharsets.UTF_8));
         kafkaHeaders.add(KafkaHeaders.DLT_EXCEPTION_MESSAGE,
                 message.getBytes(StandardCharsets.UTF_8));
         kafkaHeaders.add(KafkaHeaders.DLT_EXCEPTION_STACKTRACE, stackBytes);
-        Throwable cause = exception.getCause();
+        Throwable cause = effective.getCause();
         if (cause != null) {
             kafkaHeaders.add(KafkaHeaders.DLT_EXCEPTION_CAUSE_FQCN,
                     cause.getClass().getName().getBytes(StandardCharsets.UTF_8));
         }
+    }
+
+    private static Throwable unwrap(Throwable t) {
+        // Spring Kafka stacks at least two framework wrappers around a
+        // listener exception (ListenerExecutionFailedException at the
+        // listener boundary, TimestampedException inside the retry-topic
+        // chain). Unwrap any throwable whose class lives in the
+        // org.springframework.kafka package; stop the moment we hit
+        // something outside the framework — that's the business
+        // exception the DLT consumer cares about.
+        Throwable cursor = t;
+        while (cursor.getCause() != null
+                && cursor.getCause() != cursor
+                && cursor.getClass().getPackageName()
+                        .startsWith("org.springframework.kafka")) {
+            cursor = cursor.getCause();
+        }
+        return cursor;
     }
 
     private byte[] truncate(String stackTrace) {
