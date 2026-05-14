@@ -135,6 +135,27 @@ race is real (cleanup runs daily, a request mid-window could see a
 response). I'll watch for it in phase 2 load tests before adding
 machinery for it.
 
+## Phase 2 follow-through
+
+The operational machinery this ADR depends on lands in
+`feature/20260513-2223-phase-2-reliability-01-idempotency-wiring-hardening`:
+
+- The 24h retention cleanup is now a `@Scheduled` component
+  (`IdempotencyRetentionScheduler`, cron `0 0 3 * * *`) calling
+  `IdempotencyKeyRepository.deleteOlderThan(now − 24h)`.
+- The `@PostMapping` ArchUnit guardrail this ADR named lives in
+  `dev.dogukankat.reconcile.payment.architecture.ArchitectureTest`,
+  with a negative fixture (`BadController`) that proves the rule
+  catches a controller added without `@RequestHeader("Idempotency-Key")`.
+- A correlation ID accompanies the request from the inbound HTTP
+  header (`X-Correlation-Id`, generated if absent) through MDC, onto
+  the outbox row (new `correlation_id` column, V7 migration), into
+  the Kafka message via Debezium's outbox SMT
+  (`correlation_id:header:correlationId`), and into the consumer's
+  MDC. The stale-completed race noted in the open-question section
+  above is unchanged by this work — that revisit waits for Phase 2
+  load tests.
+
 ## Related decisions
 
 - ADR-0001: Authorization and Refund as separate aggregates (defines

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import dev.dogukankat.reconcile.payment.event.DomainEvent;
 
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -34,7 +35,8 @@ public class OutboxWriter {
                 event.authorizationId().value(),
                 event.getClass().getSimpleName(),
                 payload,
-                event.occurredAt());
+                event.occurredAt(),
+                MDC.get("correlationId"));
         repository.append(entry);
         return entry;
     }

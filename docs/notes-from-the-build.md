@@ -157,3 +157,44 @@ clean fix. Not going to spend another turn on it; the local-Postgres
 IT keeps the test suite honest, and the day this resolves the diff
 is small (~20 lines).
 
+## 2026-05-13 — Correlation IDs across the outbox boundary
+
+Wired a correlation ID end-to-end without adding a parameter to a
+single call site. The trick was MDC: a servlet filter binds
+`X-Correlation-Id` (or a generated UUID) under `correlationId`, and
+`OutboxWriter.publish` reads `MDC.get("correlationId")` when it
+constructs the entry. The application/service layers don't know the
+correlation ID exists. Same shape on the consumer side — the listener
+reads the Kafka header and binds it to MDC for the duration of
+`onAuthorizationEvent`.
+
+The Debezium piece is one line in the connector config: add
+`correlation_id:header:correlationId` to
+`transforms.outbox.table.fields.additional.placement`. The SMT
+projects the column straight onto a Kafka header. No code change in
+Debezium-land.
+
+Two small surprises:
+
+- `OutboxEntry` is a record. Adding a 7th field broke every direct
+  constructor call in the repository IT, which I'd forgotten about.
+  Mechanical fix but a reminder that record-as-record means you don't
+  get optional-arg ergonomics — every caller is a hard dependency on
+  the shape. Worth it for the immutability and the compact
+  constructor's null checks; just don't pretend the migration is
+  free.
+- Spring Boot auto-wires `@Component` filters into the security
+  chain order. `@Order(Ordered.HIGHEST_PRECEDENCE)` on
+  `CorrelationIdFilter` was probably unnecessary — Boot would have
+  put it first anyway because no other filter in this app
+  precedes it. Left the explicit ordering in because the next
+  filter that lands (auth, rate-limit, whatever) will need
+  to think about ordering anyway and the explicit annotation
+  documents the intent.
+
+ArchUnit test for the `@PostMapping` → `@RequestHeader("Idempotency-Key")`
+rule lives under `..architecture..` with a `BadController` fixture
+that violates it. Negative test passes, positive test passes against
+the real `..api..` package. The negative case isn't theatre — it's the
+only thing that proves the rule is restrictive enough.
+

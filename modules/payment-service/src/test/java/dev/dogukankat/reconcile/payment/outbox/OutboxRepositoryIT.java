@@ -40,7 +40,8 @@ class OutboxRepositoryIT {
                 aggregateId,
                 "PaymentAuthorized",
                 "{\"foo\":\"bar\"}",
-                Instant.parse("2026-05-12T10:00:00Z"));
+                Instant.parse("2026-05-12T10:00:00Z"),
+                "corr-abc");
 
         repository.append(entry);
 
@@ -52,6 +53,26 @@ class OutboxRepositoryIT {
         assertThat(roundTripped.eventType()).isEqualTo("PaymentAuthorized");
         assertThat(roundTripped.payload()).contains("\"foo\"");
         assertThat(roundTripped.occurredAt()).isEqualTo(entry.occurredAt());
+        assertThat(roundTripped.correlationId()).isEqualTo("corr-abc");
+    }
+
+    @Test
+    void appendAndReadBackPersistsNullCorrelationId() {
+        UUID aggregateId = UUID.randomUUID();
+        OutboxEntry entry = new OutboxEntry(
+                UUID.randomUUID(),
+                "authorization",
+                aggregateId,
+                "AuthorizationExpired",
+                "{}",
+                Instant.parse("2026-05-12T10:00:00Z"),
+                null);
+
+        repository.append(entry);
+
+        List<OutboxEntry> rows = repository.findByAggregateId(aggregateId);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).correlationId()).isNull();
     }
 
     @Test
@@ -90,6 +111,7 @@ class OutboxRepositoryIT {
                 aggregateId,
                 type,
                 "{}",
-                occurredAt);
+                occurredAt,
+                null);
     }
 }

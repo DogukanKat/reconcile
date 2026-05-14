@@ -8,8 +8,10 @@ import dev.dogukankat.reconcile.payment.event.DomainEvent.PaymentAuthorized;
 import dev.dogukankat.reconcile.payment.authorization.MerchantId;
 import dev.dogukankat.reconcile.payment.authorization.Money;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -29,6 +31,11 @@ class OutboxWriterTest {
         repository = new CapturingRepository();
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         writer = new OutboxWriter(repository, objectMapper);
+    }
+
+    @AfterEach
+    void clearMdc() {
+        MDC.clear();
     }
 
     @Test
@@ -52,6 +59,33 @@ class OutboxWriterTest {
                 .contains("\"authorizationId\"")
                 .contains(authId.value().toString())
                 .contains("\"USD\"");
+    }
+
+    @Test
+    void publishStampsCorrelationIdFromMdcOntoEntry() {
+        MDC.put("correlationId", "abc-123");
+        PaymentAuthorized event = new PaymentAuthorized(
+                AuthorizationId.generate(),
+                new MerchantId(UUID.randomUUID()),
+                new Money(new BigDecimal("12.34"), "USD"),
+                Instant.parse("2026-05-12T10:00:00Z"));
+
+        OutboxEntry entry = writer.publish(event);
+
+        assertThat(entry.correlationId()).isEqualTo("abc-123");
+    }
+
+    @Test
+    void publishLeavesCorrelationIdNullWhenMdcEmpty() {
+        PaymentAuthorized event = new PaymentAuthorized(
+                AuthorizationId.generate(),
+                new MerchantId(UUID.randomUUID()),
+                new Money(new BigDecimal("12.34"), "USD"),
+                Instant.parse("2026-05-12T10:00:00Z"));
+
+        OutboxEntry entry = writer.publish(event);
+
+        assertThat(entry.correlationId()).isNull();
     }
 
     @Test

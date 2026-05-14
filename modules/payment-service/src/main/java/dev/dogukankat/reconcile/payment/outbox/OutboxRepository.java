@@ -21,9 +21,10 @@ public class OutboxRepository {
     public void append(OutboxEntry entry) {
         jdbc.sql("""
                         INSERT INTO outbox
-                          (id, aggregatetype, aggregateid, type, payload, occurred_at)
+                          (id, aggregatetype, aggregateid, type, payload, occurred_at,
+                           correlation_id)
                         VALUES (:id, :aggregateType, :aggregateId, :eventType,
-                                CAST(:payload AS JSONB), :occurredAt)
+                                CAST(:payload AS JSONB), :occurredAt, :correlationId)
                         """)
                 .param("id", entry.id())
                 .param("aggregateType", entry.aggregateType())
@@ -31,13 +32,15 @@ public class OutboxRepository {
                 .param("eventType", entry.eventType())
                 .param("payload", entry.payload())
                 .param("occurredAt", Timestamp.from(entry.occurredAt()))
+                .param("correlationId", entry.correlationId())
                 .update();
     }
 
     /** Used by tests; production reads go through Debezium, not this method. */
     public List<OutboxEntry> findByAggregateId(UUID aggregateId) {
         return jdbc.sql("""
-                        SELECT id, aggregatetype, aggregateid, type, payload, occurred_at
+                        SELECT id, aggregatetype, aggregateid, type, payload, occurred_at,
+                               correlation_id
                         FROM outbox
                         WHERE aggregateid = :aggregateId
                         ORDER BY occurred_at, created_at
@@ -49,7 +52,8 @@ public class OutboxRepository {
                         rs.getObject("aggregateid", UUID.class),
                         rs.getString("type"),
                         rs.getString("payload"),
-                        rs.getTimestamp("occurred_at").toInstant()))
+                        rs.getTimestamp("occurred_at").toInstant(),
+                        rs.getString("correlation_id")))
                 .list();
     }
 }
