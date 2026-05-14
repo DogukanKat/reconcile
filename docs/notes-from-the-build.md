@@ -402,3 +402,50 @@ Phase 2 is six PRs stacked on `main`. The branch ergonomics are
 slightly clumsy — each PR has to retarget once its parent merges
 — but the alternative was one monster PR. Six reviewable
 diffs of ~300 lines each beats one impossible diff of ~2000.
+
+## 2026-05-14 — @DltHandler doesn't auto-discover with the bean route
+
+End-to-end smoke against the running cluster found the third
+Spring Kafka gotcha of Phase 2, and the unit tests had no way to
+catch it. DLT records were arriving with the right headers — the
+`TruncatingExceptionHeadersCreator` was firing, the unwrapped
+business-exception FQCN was written — but
+`AuthorizationEventListener.onDlt` itself was never called. Spring
+Kafka's internal `RetryTopicConfigurer` logged
+`Received message in dlt listener` at INFO and the application's
+structured `consumer_dlt_received` log plus the
+`reconcile_consumer_dlq_total` counter both stayed dark.
+
+The cause: `@DltHandler` is auto-discovered only when the listener
+is wired via `@RetryableTopic` on the method. With the bean
+approach (`RetryTopicConfiguration` from Feature 03), Spring Kafka
+uses a default DLT handler unless you explicitly call
+`.dltHandlerMethod(beanName, methodName)` on the builder. The bean
+approach was the right call for cross-consumer reuse, but it
+silently disables the annotation-based discovery and there's no
+warning at startup.
+
+Three things this teaches:
+
+- Unit tests that invoke listener methods directly (the cheap way
+  to test message handlers) bypass exactly the discovery paths
+  that production relies on. The unit test for `onDlt` passed all
+  the way through Phase 2 review; the wiring it relies on was
+  never exercised.
+- The PoisonMessageIT in Feature 05 asserts on the producer side
+  of the DLT (record headers, payload, FQCN). The consumer side
+  — the `@DltHandler` actually firing — is a different code path
+  that the IT didn't probe. Filed as a follow-up to extend the IT
+  to assert on the `ConsumerMetrics.recordDlq` counter
+  incrementing.
+- Spring Kafka has multiple "auto-discovery" paths
+  (`@KafkaListener`, `@RetryableTopic`, `@DltHandler`,
+  `RetryTopicConfiguration` bean), and they don't all activate
+  the same downstream wiring. The annotation route has more magic
+  than the bean route, and the documentation doesn't list the
+  differences side-by-side.
+
+The fix is one line on the builder. The bug is one PR. The lesson
+— that integration tests need to assert on the side of the
+boundary the user sees, not just on what gets written across it —
+is the load-bearing part.

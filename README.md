@@ -14,38 +14,48 @@ request after a connection drop.
 
 ## Status
 
-Phase 2, reliability — six features stacked as PRs on top of the
-Phase 1 happy path. Phase 1 (Foundations) shipped the domain model,
+Phase 2 is shipped. Phase 1 (Foundations) gave us the domain model,
 state machine, outbox-to-Kafka bridge via Debezium, and a first
-consumer in notification-service. Phase 2 turns the happy path into
-something that survives transient failures and bad inputs without
-losing events or double-charging:
+consumer in notification-service. Phase 2 (Reliability) closed
+six gaps that turned the happy path into something that survives
+transient failures and bad inputs without losing events or
+double-charging:
 
 - **Idempotency operational hardening** — retention scheduler,
   ArchUnit guardrail on `@PostMapping` controllers, correlation ID
   propagation end-to-end through MDC, outbox row, Kafka header, and
   consumer logs.
-- **Consumer error taxonomy** — sealed `RetryableConsumerException`
-  / `NonRetryableConsumerException` with a classifier defaulting to
-  non-retryable (retry-by-default amplifies poison pills).
+- **Consumer error taxonomy** — `RetryableConsumerException` /
+  `NonRetryableConsumerException` markers with a classifier
+  defaulting to non-retryable (retry-by-default amplifies poison
+  pills).
 - **Retry topic with exponential backoff** — Spring Kafka's
   `RetryTopicConfiguration`, 1s/3s/9s, four total attempts, scoped
   per topic.
 - **Dead-letter routing** — `DeadLetterPublishingRecoverer` with a
-  stack-trace-truncating header creator, `@DltHandler` for the
-  structured log line that pages someone.
+  stack-trace-truncating header creator that unwraps Spring Kafka's
+  framework wrappers, `@DltHandler` explicitly wired into the chain
+  via `dltHandlerMethod(...)` for the structured log line that
+  pages someone.
 - **Poison-message integration test** — three scenarios end-to-end
   against the local Kafka brought up by `make up`.
-- **Observability and docs** — Prometheus counters (DLT publishes,
-  idempotency outcomes, retention deletions), ADR-0008 for the
-  retry/DLQ strategy, `docs/failure-modes.md` for the six modes
-  Phase 2 is designed to survive.
+- **Observability and docs** — Prometheus counters for DLT
+  publishes and idempotency outcomes, ADR-0008 for the retry/DLQ
+  strategy, `docs/failure-modes.md` for the six modes Phase 2 is
+  designed to survive.
 
-Later phases add schema evolution under Avro (Phase 3), a Kafka
-Streams read-model projection (Phase 4), and the full operational
-surface — distributed tracing, load tests, and dashboards-as-code
-(Phase 5). The repo has been shareable since Phase 1; Phase 2
-turns the demo into something operationally credible.
+Everything in that list has been smoke-tested end-to-end against
+the running cluster, including the retry → DLT path with a real
+poison message. `docs/notes-from-the-build.md` records the
+surprises along the way — `@DltHandler` discovery with the bean
+approach was one of three Spring Kafka gotchas that the unit tests
+didn't catch.
+
+Phase 3 (Schemas) is next: Avro plus Schema Registry, with
+evolution scenarios that actually break and get fixed. After that,
+Phase 4 lands the Kafka Streams read-model projection, and Phase 5
+covers the operational surface — distributed tracing, load tests,
+and dashboards-as-code.
 
 ## How to read this repo
 
