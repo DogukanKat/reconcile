@@ -3,8 +3,10 @@ package dev.dogukankat.reconcile.notification;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
+@ConfigurationPropertiesScan
 public class NotificationServiceApplication {
 
     public static void main(String[] args) {

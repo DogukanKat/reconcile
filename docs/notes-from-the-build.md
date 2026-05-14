@@ -231,3 +231,78 @@ the classifier honors it instead of walking the cause chain
 looking for a reason to override. If we ever need the opposite,
 that's a documented decision, not a bug.
 
+## 2026-05-14 — Spring Kafka retry topic wiring
+
+Bean route over annotation. `@RetryableTopic` on the listener method
+is the textbook way but it binds the retry config to one consumer,
+and Phase 3 will land at least one more (webhook dispatch). A
+`RetryTopicConfiguration` bean with `includeTopic("...v1")` is
+slightly more code now and saves rewriting later.
+
+Two surprises while writing the test:
+
+- `DestinationTopic.Properties` (returned by
+  `getDestinationTopicProperties()`) doesn't expose its
+  `shouldRetryOn` BiPredicate. The outer `DestinationTopic` class
+  does — its `shouldRetryOn(Integer, Throwable)` method delegates
+  to the private field. The test had to wrap each Properties into
+  a `new DestinationTopic("name", props)` to reach the predicate.
+  Spring Kafka could expose it directly; opening an issue is on my
+  list.
+- The default `topic.suffix.strategy` is `SUFFIX_WITH_DELAY_VALUE`
+  which produces `-retry-1000`, `-retry-3000`, `-retry-9000`. Hard
+  to read when you don't know the backoff in your head. Switched
+  to `suffixTopicsWithIndexValues()` so the suffixes become
+  `-retry-0`, `-retry-1`, `-retry-2` — the attempt number is
+  what's meaningful, the delay is config you can tune.
+
+`retryOn(List.of(RetryableConsumerException.class,
+SocketTimeoutException.class))` plus `traversingCauses()` mirrors
+Feature 02's classifier exactly: explicit-retryable wins, network
+timeout in the cause chain triggers retry, everything else falls
+through to DLT on first failure. Conservative default in topology,
+not just in code.
+
+The `auto-offset-reset: earliest` setting on the main topic kept
+the existing Phase 1 backlog-replay behaviour; the retry topics
+inherit `latest` by Spring Kafka's default and that's the right
+call — a deploy of notification-service should not replay every
+retry it ever scheduled. Documented in the YAML next to the
+setting.
+
+## 2026-05-14 — DLT recoverer customization
+
+Spring Kafka's `DeadLetterPublishingRecoverer` ships with no
+stack-trace length cap. A deep Java trace (a stuck Spring proxy
+chain, a recursive serializer) blows past Kafka's
+`message.max.bytes=1MB` surprisingly fast. The fix is plugging in a
+custom `ExceptionHeadersCreator` and setting it via
+`RetryTopicConfigurationSupport.configureCustomizers(...)`. 4KB cap;
+the head of the trace survives, which is the only part anyone reads
+when triaging.
+
+`HeaderNames` passed to `ExceptionHeadersCreator.create(...)` is for
+honoring custom header renames. We don't have any, so the parameter
+is ignored and the impl writes default `KafkaHeaders.DLT_*` names.
+If we ever want renames, the indirection cost is one map lookup.
+
+Removed `@EnableKafkaRetryTopic` from the main class when I added
+the `RetryTopicConfigurationSupport` bean — the annotation imports
+its own default support bean and Spring Boot's bean-override
+default is `false` in 2.1+, so having both would have failed at
+startup. Easy to miss; the test would have been silent because
+unit tests don't boot the full context.
+
+The `@DltHandler` lives on the same `AuthorizationEventListener`
+class as `@KafkaListener`. Spring Kafka's retry-topic infra
+auto-discovers it when the retry config's `includeTopic` matches
+the listener's topic. The DLT record's failure metadata lands in
+`KafkaHeaders.DLT_*` headers; `DLT_ORIGINAL_PARTITION` and
+`DLT_ORIGINAL_OFFSET` are big-endian `Integer.BYTES`/`Long.BYTES`,
+not UTF-8 — decoded with `ByteBuffer.wrap(...).getInt() /
+.getLong()`. Spent more time on this than I'd like to admit.
+
+The DLT is terminal. Nothing automatic pulls from it. Replay is a
+deliberate human action; `docs/failure-modes.md` (Feature 06) will
+spell out the playbook.
+
