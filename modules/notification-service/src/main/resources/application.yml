@@ -35,6 +35,20 @@ reconcile:
       max-delay: 5m
       max-attempts: 4
 
+server:
+  # notification-service is a Kafka consumer; the HTTP port exists
+  # only for the actuator endpoints (Prometheus scrape, health).
+  port: 8081
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
 logging:
   level:
     dev.dogukankat: DEBUG

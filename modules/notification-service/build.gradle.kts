@@ -6,7 +6,10 @@ plugins {
 
 dependencies {
     implementation(libs.spring.boot.starter)
+    implementation(libs.spring.boot.starter.actuator)
+    implementation(libs.spring.boot.starter.web)
     implementation(libs.spring.kafka)
+    runtimeOnly(libs.micrometer.registry.prometheus)
 
     testImplementation(libs.bundles.test)
     testImplementation(libs.spring.boot.starter.test)

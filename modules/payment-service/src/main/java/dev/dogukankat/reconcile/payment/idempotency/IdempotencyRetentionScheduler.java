@@ -1,5 +1,7 @@
 package dev.dogukankat.reconcile.payment.idempotency;
 
+import dev.dogukankat.reconcile.payment.observability.IdempotencyMetrics;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,16 +29,22 @@ public class IdempotencyRetentionScheduler {
 
     private final IdempotencyKeyRepository repository;
     private final Clock clock;
+    private final IdempotencyMetrics metrics;
 
-    public IdempotencyRetentionScheduler(IdempotencyKeyRepository repository, Clock clock) {
+    public IdempotencyRetentionScheduler(
+            IdempotencyKeyRepository repository,
+            Clock clock,
+            IdempotencyMetrics metrics) {
         this.repository = repository;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     @Scheduled(cron = "0 0 3 * * *")
     public int cleanup() {
         Instant cutoff = clock.instant().minus(RETENTION);
         int deleted = repository.deleteOlderThan(cutoff);
+        metrics.recordRetentionDeleted(deleted);
         log.info("cleaned_idempotency_keys count={} cutoff={}", deleted, cutoff);
         return deleted;
     }

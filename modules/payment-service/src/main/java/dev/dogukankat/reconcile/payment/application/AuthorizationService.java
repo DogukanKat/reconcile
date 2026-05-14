@@ -12,6 +12,8 @@ import dev.dogukankat.reconcile.payment.authorization.MerchantId;
 import dev.dogukankat.reconcile.payment.event.DomainEvent;
 import dev.dogukankat.reconcile.payment.idempotency.IdempotencyKeyRepository;
 import dev.dogukankat.reconcile.payment.idempotency.IdempotencyResult;
+import dev.dogukankat.reconcile.payment.observability.IdempotencyMetrics;
+import dev.dogukankat.reconcile.payment.observability.IdempotencyMetrics.Outcome;
 import dev.dogukankat.reconcile.payment.outbox.OutboxWriter;
 
 import org.springframework.stereotype.Service;
@@ -39,18 +41,21 @@ public class AuthorizationService {
     private final OutboxWriter outbox;
     private final ObjectMapper objectMapper;
     private final Clock clock;
+    private final IdempotencyMetrics metrics;
 
     public AuthorizationService(
             AuthorizationRepository authorizations,
             IdempotencyKeyRepository idempotency,
             OutboxWriter outbox,
             ObjectMapper objectMapper,
-            Clock clock) {
+            Clock clock,
+            IdempotencyMetrics metrics) {
         this.authorizations = authorizations;
         this.idempotency = idempotency;
         this.outbox = outbox;
         this.objectMapper = objectMapper;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     @Transactional
@@ -173,7 +178,18 @@ public class AuthorizationService {
 
     private IdempotencyResult reserve(
             MerchantId merchantId, String key, String hash, Instant now) {
-        return idempotency.tryReserve(merchantId, key, hash, now);
+        IdempotencyResult result = idempotency.tryReserve(merchantId, key, hash, now);
+        metrics.record(outcomeOf(result));
+        return result;
+    }
+
+    private static Outcome outcomeOf(IdempotencyResult result) {
+        return switch (result) {
+            case IdempotencyResult.Inserted ignored -> Outcome.INSERTED;
+            case IdempotencyResult.InProgress ignored -> Outcome.IN_PROGRESS;
+            case IdempotencyResult.HashMismatch ignored -> Outcome.HASH_MISMATCH;
+            case IdempotencyResult.Completed ignored -> Outcome.COMPLETED_REPLAY;
+        };
     }
 
     private static ServiceResult replay(IdempotencyResult.Completed c) {

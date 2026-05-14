@@ -1,5 +1,9 @@
 package dev.dogukankat.reconcile.payment.idempotency;
 
+import dev.dogukankat.reconcile.payment.observability.IdempotencyMetrics;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -19,7 +23,9 @@ class IdempotencyRetentionSchedulerTest {
         AtomicReference<Instant> seenCutoff = new AtomicReference<>();
         IdempotencyKeyRepository repo = new CapturingRepository(seenCutoff, 7);
         IdempotencyRetentionScheduler scheduler = new IdempotencyRetentionScheduler(
-                repo, Clock.fixed(FIXED_NOW, ZoneOffset.UTC));
+                repo,
+                Clock.fixed(FIXED_NOW, ZoneOffset.UTC),
+                new IdempotencyMetrics(new SimpleMeterRegistry()));
 
         int deleted = scheduler.cleanup();
 
@@ -31,7 +37,9 @@ class IdempotencyRetentionSchedulerTest {
     void cleanupReturnsZeroWhenNothingToDelete() {
         IdempotencyKeyRepository repo = new CapturingRepository(new AtomicReference<>(), 0);
         IdempotencyRetentionScheduler scheduler = new IdempotencyRetentionScheduler(
-                repo, Clock.fixed(FIXED_NOW, ZoneOffset.UTC));
+                repo,
+                Clock.fixed(FIXED_NOW, ZoneOffset.UTC),
+                new IdempotencyMetrics(new SimpleMeterRegistry()));
 
         assertThat(scheduler.cleanup()).isZero();
     }

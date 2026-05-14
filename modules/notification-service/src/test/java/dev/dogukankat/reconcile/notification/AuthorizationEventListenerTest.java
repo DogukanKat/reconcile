@@ -6,6 +6,9 @@ import ch.qos.logback.core.read.ListAppender;
 
 import dev.dogukankat.reconcile.notification.error.NonRetryableConsumerException;
 import dev.dogukankat.reconcile.notification.listener.NoOpListenerFaultInjector;
+import dev.dogukankat.reconcile.notification.observability.ConsumerMetrics;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,7 +24,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AuthorizationEventListenerTest {
 
     private final AuthorizationEventListener listener =
-            new AuthorizationEventListener(new NoOpListenerFaultInjector());
+            new AuthorizationEventListener(
+                    new NoOpListenerFaultInjector(),
+                    new ConsumerMetrics(new SimpleMeterRegistry()));
     private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
     private final Logger logger =
             (Logger) LoggerFactory.getLogger(AuthorizationEventListener.class);

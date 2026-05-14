@@ -8,7 +8,10 @@ import dev.dogukankat.reconcile.payment.authorization.MerchantId;
 import dev.dogukankat.reconcile.payment.authorization.Money;
 import dev.dogukankat.reconcile.payment.idempotency.IdempotencyKeyRepository;
 import dev.dogukankat.reconcile.payment.idempotency.IdempotencyResult;
+import dev.dogukankat.reconcile.payment.observability.IdempotencyMetrics;
 import dev.dogukankat.reconcile.payment.outbox.OutboxWriter;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,7 +50,8 @@ class AuthorizationServiceTest {
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
         service = new AuthorizationService(
                 authorizations, idempotency, outbox, objectMapper,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                new IdempotencyMetrics(new SimpleMeterRegistry()));
     }
 
     @Test
