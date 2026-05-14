@@ -368,3 +368,37 @@ The whole IT runs in ~12 seconds wall clock against the local
 broker — three scenarios (retry-then-success, retry-exhausted,
 immediate-DLT) with aggressive backoffs in `application-it.yml`
 (100ms / x2 / 1s cap / 4 attempts).
+
+## 2026-05-14 — Phase 2 wrap-up
+
+The thing I didn't expect at the start of Phase 2: how much of the
+work was operational, not algorithmic. The retry/DLT design is two
+days of thinking. Wiring it so Spring Kafka's actual lifecycle
+hooks fire correctly was the same again. The `@Bean` vs
+`@Configuration` subclass distinction, the `DLT_ORIGINAL_TOPIC` vs
+`ORIGINAL_TOPIC` constant split, the listener-exception unwrapping
+through framework wrappers — each one was a quiet trap that the
+unit tests didn't catch. Feature 05's IT against real Kafka was
+the surface that surfaced them.
+
+Counting retries cleanly turned out to be impossible without
+overriding more of Spring Kafka's internals than seems worth it.
+The `_dlq_total` counter is enough for the dashboards that
+matter; the retry chain is observable via
+`kafka-console-consumer` on the retry topics. Filed as a Phase 3
+follow-up in ADR-0008's open-questions.
+
+One satisfying thing: the consumer-side classifier and the
+retry-topic config ended up encoding the same rule in two
+different places. The unit tests for the classifier
+(`ConsumerErrorClassifierTest`) are the executable spec. The
+retry-topic config's `retryOn(List.of(...))` references the same
+exception classes. If they ever drift, the IT in Feature 05
+catches it. That feels like the right shape — not coupled
+implementations, but coupled by their references to the same
+domain types.
+
+Phase 2 is six PRs stacked on `main`. The branch ergonomics are
+slightly clumsy — each PR has to retarget once its parent merges
+— but the alternative was one monster PR. Six reviewable
+diffs of ~300 lines each beats one impossible diff of ~2000.

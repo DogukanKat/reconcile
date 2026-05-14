@@ -2,6 +2,7 @@ package dev.dogukankat.reconcile.notification;
 
 import dev.dogukankat.reconcile.notification.error.NonRetryableConsumerException;
 import dev.dogukankat.reconcile.notification.listener.ListenerFaultInjector;
+import dev.dogukankat.reconcile.notification.observability.ConsumerMetrics;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,9 +37,13 @@ public class AuthorizationEventListener {
     private static final String MDC_CORRELATION_ID = "correlationId";
 
     private final ListenerFaultInjector faultInjector;
+    private final ConsumerMetrics metrics;
 
-    public AuthorizationEventListener(ListenerFaultInjector faultInjector) {
+    public AuthorizationEventListener(
+            ListenerFaultInjector faultInjector,
+            ConsumerMetrics metrics) {
         this.faultInjector = faultInjector;
+        this.metrics = metrics;
     }
 
     @KafkaListener(topics = "reconcile.authorization.v1",
@@ -98,6 +103,7 @@ public class AuthorizationEventListener {
             mdcBound = true;
         }
         try {
+            metrics.recordDlq(asString(originalTopic), asString(exceptionFqcn));
             log.error(
                     "consumer_dlt_received topic={} partition={} offset={} key={} exception={} message={} payload={}",
                     asString(originalTopic),

@@ -6,11 +6,13 @@ plugins {
 
 dependencies {
     implementation(libs.spring.boot.starter.web)
+    implementation(libs.spring.boot.starter.actuator)
     implementation(libs.spring.boot.starter.jdbc)
     implementation(libs.spring.boot.starter.validation)
     implementation(libs.postgres.jdbc)
     implementation(libs.flyway.core)
     implementation(libs.flyway.database.postgresql)
+    runtimeOnly(libs.micrometer.registry.prometheus)
 
     testImplementation(libs.bundles.test)
     testImplementation(libs.spring.boot.starter.test)

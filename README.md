@@ -14,17 +14,38 @@ request after a connection drop.
 
 ## Status
 
-Phase 1, foundations. No code yet — the work right now is design.
-Six ADRs in `docs/adr/` cover the Phase 1 domain model and event
-topology. Once those settle, payment-service gets a skeleton (Spring
-Boot, Postgres, a single endpoint), then the outbox table and the
-Debezium wiring, then notification-service as a first real consumer.
+Phase 2, reliability — six features stacked as PRs on top of the
+Phase 1 happy path. Phase 1 (Foundations) shipped the domain model,
+state machine, outbox-to-Kafka bridge via Debezium, and a first
+consumer in notification-service. Phase 2 turns the happy path into
+something that survives transient failures and bad inputs without
+losing events or double-charging:
 
-Later phases add retries and DLQ, schema evolution under Avro, a
-Kafka Streams read-model projection, and the full operational
-surface — metrics, tracing, load tests, documented failure modes.
-The repo is shareable as of Phase 1; the ADRs alone signal the shape
-of the work.
+- **Idempotency operational hardening** — retention scheduler,
+  ArchUnit guardrail on `@PostMapping` controllers, correlation ID
+  propagation end-to-end through MDC, outbox row, Kafka header, and
+  consumer logs.
+- **Consumer error taxonomy** — sealed `RetryableConsumerException`
+  / `NonRetryableConsumerException` with a classifier defaulting to
+  non-retryable (retry-by-default amplifies poison pills).
+- **Retry topic with exponential backoff** — Spring Kafka's
+  `RetryTopicConfiguration`, 1s/3s/9s, four total attempts, scoped
+  per topic.
+- **Dead-letter routing** — `DeadLetterPublishingRecoverer` with a
+  stack-trace-truncating header creator, `@DltHandler` for the
+  structured log line that pages someone.
+- **Poison-message integration test** — three scenarios end-to-end
+  against the local Kafka brought up by `make up`.
+- **Observability and docs** — Prometheus counters (DLT publishes,
+  idempotency outcomes, retention deletions), ADR-0008 for the
+  retry/DLQ strategy, `docs/failure-modes.md` for the six modes
+  Phase 2 is designed to survive.
+
+Later phases add schema evolution under Avro (Phase 3), a Kafka
+Streams read-model projection (Phase 4), and the full operational
+surface — distributed tracing, load tests, and dashboards-as-code
+(Phase 5). The repo has been shareable since Phase 1; Phase 2
+turns the demo into something operationally credible.
 
 ## How to read this repo
 
@@ -38,6 +59,9 @@ short version:
 - ADR-0005 — why per-aggregate topics partitioned by authorizationId
 - ADR-0006 — the idempotency contract: source, scope, storage,
   retention
+- ADR-0007 — JdbcClient over JPA for aggregate persistence
+- ADR-0008 — retry topic and DLQ strategy: backoff, classification,
+  topic naming, and the limits at which I'd reconsider Spring Kafka
 
 `docs/domain-model.md`, `docs/storage/`, and `docs/architecture/` are
 the non-decision references — schemas, write-path walkthroughs, state
