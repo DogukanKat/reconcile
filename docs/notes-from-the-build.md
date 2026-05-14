@@ -270,3 +270,39 @@ call — a deploy of notification-service should not replay every
 retry it ever scheduled. Documented in the YAML next to the
 setting.
 
+## 2026-05-14 — DLT recoverer customization
+
+Spring Kafka's `DeadLetterPublishingRecoverer` ships with no
+stack-trace length cap. A deep Java trace (a stuck Spring proxy
+chain, a recursive serializer) blows past Kafka's
+`message.max.bytes=1MB` surprisingly fast. The fix is plugging in a
+custom `ExceptionHeadersCreator` and setting it via
+`RetryTopicConfigurationSupport.configureCustomizers(...)`. 4KB cap;
+the head of the trace survives, which is the only part anyone reads
+when triaging.
+
+`HeaderNames` passed to `ExceptionHeadersCreator.create(...)` is for
+honoring custom header renames. We don't have any, so the parameter
+is ignored and the impl writes default `KafkaHeaders.DLT_*` names.
+If we ever want renames, the indirection cost is one map lookup.
+
+Removed `@EnableKafkaRetryTopic` from the main class when I added
+the `RetryTopicConfigurationSupport` bean — the annotation imports
+its own default support bean and Spring Boot's bean-override
+default is `false` in 2.1+, so having both would have failed at
+startup. Easy to miss; the test would have been silent because
+unit tests don't boot the full context.
+
+The `@DltHandler` lives on the same `AuthorizationEventListener`
+class as `@KafkaListener`. Spring Kafka's retry-topic infra
+auto-discovers it when the retry config's `includeTopic` matches
+the listener's topic. The DLT record's failure metadata lands in
+`KafkaHeaders.DLT_*` headers; `DLT_ORIGINAL_PARTITION` and
+`DLT_ORIGINAL_OFFSET` are big-endian `Integer.BYTES`/`Long.BYTES`,
+not UTF-8 — decoded with `ByteBuffer.wrap(...).getInt() /
+.getLong()`. Spent more time on this than I'd like to admit.
+
+The DLT is terminal. Nothing automatic pulls from it. Replay is a
+deliberate human action; `docs/failure-modes.md` (Feature 06) will
+spell out the playbook.
+
