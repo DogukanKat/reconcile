@@ -1,5 +1,7 @@
 package dev.dogukankat.reconcile.notification;
 
+import dev.dogukankat.reconcile.notification.error.NonRetryableConsumerException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -37,8 +39,16 @@ public class AuthorizationEventListener {
             @Header(name = "correlationId", required = false) byte[] correlationId,
             @Header(KafkaHeaders.RECEIVED_KEY) String key,
             @Payload String payload) {
-        String type = eventType == null ? "?" : new String(eventType, StandardCharsets.UTF_8);
-        String outbox = outboxId == null ? "?" : new String(outboxId, StandardCharsets.UTF_8);
+        if (eventType == null) {
+            throw new NonRetryableConsumerException(
+                    "missing required header: eventType");
+        }
+        if (outboxId == null) {
+            throw new NonRetryableConsumerException(
+                    "missing required header: id");
+        }
+        String type = new String(eventType, StandardCharsets.UTF_8);
+        String outbox = new String(outboxId, StandardCharsets.UTF_8);
         boolean mdcBound = false;
         if (correlationId != null && correlationId.length > 0) {
             MDC.put(MDC_CORRELATION_ID, new String(correlationId, StandardCharsets.UTF_8));

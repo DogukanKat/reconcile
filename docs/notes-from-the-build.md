@@ -198,3 +198,36 @@ that violates it. Negative test passes, positive test passes against
 the real `..api..` package. The negative case isn't theatre — it's the
 only thing that proves the rule is restrictive enough.
 
+## 2026-05-14 — Consumer error taxonomy
+
+Two marker exceptions (`RetryableConsumerException`,
+`NonRetryableConsumerException`) plus a `ConsumerErrorClassifier`
+that returns one of two `Classification` enum values. No sealed
+parent. I considered one — it would let the classifier use an
+exhaustive switch on the two children — but the classifier already
+has to handle every random `RuntimeException` that hits the
+listener, so the exhaustive switch wouldn't actually be exhaustive
+over what the classifier sees. A common parent just adds a layer.
+
+The feature spec listed `TransientDataAccessException` as a
+retryable case. Dropped it: spring-data isn't on
+notification-service's classpath (only `spring-boot-starter` and
+`spring-kafka`), and pulling spring-data in just to reference one
+exception type would be the kind of "import a framework to use one
+class" pattern I'd push back on in review. The retry chain can
+look at the cause for a `SocketTimeoutException` for the same
+practical effect.
+
+The conservative default — unknown `RuntimeException` →
+NON_RETRYABLE — is the most important decision in the file. The
+alternative (retry by default) is the textbook way to amplify a
+poison pill into a slow-motion incident. ADR-0008 in Feature 06
+will spell this out for the reader.
+
+One subtle case I tested explicitly:
+`RetryableConsumerException` wrapping a `DeserializationException`
+classifies as RETRYABLE. The thrower made an explicit claim and
+the classifier honors it instead of walking the cause chain
+looking for a reason to override. If we ever need the opposite,
+that's a documented decision, not a bug.
+

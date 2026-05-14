@@ -4,6 +4,8 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 
+import dev.dogukankat.reconcile.notification.error.NonRetryableConsumerException;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.slf4j.MDC;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AuthorizationEventListenerTest {
 
@@ -48,6 +51,32 @@ class AuthorizationEventListenerTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(event.getMDCPropertyMap()).containsEntry("correlationId", "abc-123");
+        assertThat(MDC.get("correlationId")).isNull();
+    }
+
+    @Test
+    void missingEventTypeHeaderThrowsNonRetryable() {
+        assertThatThrownBy(() -> listener.onAuthorizationEvent(
+                null,
+                "00000000-0000-0000-0000-000000000001".getBytes(StandardCharsets.UTF_8),
+                "abc-123".getBytes(StandardCharsets.UTF_8),
+                "auth-key",
+                "{}"))
+                .isInstanceOf(NonRetryableConsumerException.class)
+                .hasMessageContaining("eventType");
+        assertThat(MDC.get("correlationId")).isNull();
+    }
+
+    @Test
+    void missingOutboxIdHeaderThrowsNonRetryable() {
+        assertThatThrownBy(() -> listener.onAuthorizationEvent(
+                "PaymentAuthorized".getBytes(StandardCharsets.UTF_8),
+                null,
+                "abc-123".getBytes(StandardCharsets.UTF_8),
+                "auth-key",
+                "{}"))
+                .isInstanceOf(NonRetryableConsumerException.class)
+                .hasMessageContaining("id");
         assertThat(MDC.get("correlationId")).isNull();
     }
 
