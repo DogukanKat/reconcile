@@ -231,3 +231,42 @@ the classifier honors it instead of walking the cause chain
 looking for a reason to override. If we ever need the opposite,
 that's a documented decision, not a bug.
 
+## 2026-05-14 — Spring Kafka retry topic wiring
+
+Bean route over annotation. `@RetryableTopic` on the listener method
+is the textbook way but it binds the retry config to one consumer,
+and Phase 3 will land at least one more (webhook dispatch). A
+`RetryTopicConfiguration` bean with `includeTopic("...v1")` is
+slightly more code now and saves rewriting later.
+
+Two surprises while writing the test:
+
+- `DestinationTopic.Properties` (returned by
+  `getDestinationTopicProperties()`) doesn't expose its
+  `shouldRetryOn` BiPredicate. The outer `DestinationTopic` class
+  does — its `shouldRetryOn(Integer, Throwable)` method delegates
+  to the private field. The test had to wrap each Properties into
+  a `new DestinationTopic("name", props)` to reach the predicate.
+  Spring Kafka could expose it directly; opening an issue is on my
+  list.
+- The default `topic.suffix.strategy` is `SUFFIX_WITH_DELAY_VALUE`
+  which produces `-retry-1000`, `-retry-3000`, `-retry-9000`. Hard
+  to read when you don't know the backoff in your head. Switched
+  to `suffixTopicsWithIndexValues()` so the suffixes become
+  `-retry-0`, `-retry-1`, `-retry-2` — the attempt number is
+  what's meaningful, the delay is config you can tune.
+
+`retryOn(List.of(RetryableConsumerException.class,
+SocketTimeoutException.class))` plus `traversingCauses()` mirrors
+Feature 02's classifier exactly: explicit-retryable wins, network
+timeout in the cause chain triggers retry, everything else falls
+through to DLT on first failure. Conservative default in topology,
+not just in code.
+
+The `auto-offset-reset: earliest` setting on the main topic kept
+the existing Phase 1 backlog-replay behaviour; the retry topics
+inherit `latest` by Spring Kafka's default and that's the right
+call — a deploy of notification-service should not replay every
+retry it ever scheduled. Documented in the YAML next to the
+setting.
+

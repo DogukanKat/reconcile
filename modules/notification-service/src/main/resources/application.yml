@@ -8,11 +8,32 @@ spring:
     bootstrap-servers: localhost:9094
     consumer:
       group-id: notification-service
+      # Retry topics start at latest on purpose (see ADR-0008): a
+      # deploy of this service must not replay every message that
+      # ever landed on a retry topic. The main topic keeps earliest
+      # so a fresh consumer still reads through the existing backlog
+      # of authorization events.
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       properties:
         spring.json.trusted.packages: "*"
+    producer:
+      # Retry topics use the same broker; the KafkaTemplate Spring
+      # Kafka injects into the RetryTopicConfiguration borrows this
+      # configuration.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+reconcile:
+  consumer:
+    retry:
+      # Defaults match ADR-0008 (Feature 06). Bump per environment via
+      # env vars: RECONCILE_CONSUMER_RETRY_INITIAL_DELAY etc.
+      initial-delay: 1s
+      multiplier: 3.0
+      max-delay: 5m
+      max-attempts: 4
 
 logging:
   level:
