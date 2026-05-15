@@ -1,0 +1,41 @@
+{
+  "type": "record",
+  "name": "PaymentAuthorized",
+  "namespace": "dev.dogukankat.reconcile.events",
+  "doc": "Emitted when an authorization transitions to AUTHORIZED. This is the value schema for the reconcile.authorization.v1 topic in Phase 3. Only PaymentAuthorized is modelled this phase; the other event types the Phase 1 outbox routes to this topic (AuthorizationVoided, AuthorizationExpired, PaymentCaptured, ...) are out of scope until they are proven the same way (see ADR-0009). The consumer reads eventType, id, and correlationId from Kafka headers, not from this body — headers stay headers, the Avro body is the event state.",
+  "fields": [
+    {
+      "name": "authorizationId",
+      "type": "string",
+      "doc": "UUID of the authorization aggregate, as a string. Matches what the Phase 1 JSON payload carried; the Avro uuid logical type was rejected because it buys nothing here (the value is already a canonical UUID string end to end) and complicates the cross-language story."
+    },
+    {
+      "name": "merchantId",
+      "type": "string",
+      "doc": "UUID of the owning merchant, as a string. Same string-over-uuid-logical-type reasoning as authorizationId."
+    },
+    {
+      "name": "amount",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 18,
+        "scale": 4
+      },
+      "doc": "Authorized amount. decimal logical type, scale 4 to match Money.SCALE in the domain; precision 18 covers any realistic transaction (up to 99,999,999,999,999.9999) without over-allocating. ADR-0004: never float — float drift on money is the exact class of bug this project exists to not have."
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "doc": "ISO 4217 alphabetic code (e.g. USD, EUR). Validated as a real currency in the domain before this event is produced."
+    },
+    {
+      "name": "occurredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-micros"
+      },
+      "doc": "Domain timestamp the event carries (not the outbox row's persistence time). timestamp-micros, not millis, to match the microsecond resolution of the Postgres TIMESTAMPTZ the outbox stores — truncating to millis here would lose precision relative to what the source of truth holds."
+    }
+  ]
+}
