@@ -488,3 +488,40 @@ The registry is infra-only. Nothing Java changed; the full Phase
 1/2 suite (120 tests including the live-Kafka PoisonMessageIT) is
 green against the now-four-service stack, which is the only thing
 this feature had to prove.
+
+## 2026-05-15 — shared-events becomes real: Avro codegen
+
+Less friction than I budgeted for. Two small course-corrections:
+
+- The davidmc24 gradle-avro-plugin 1.9.1 extension does **not**
+  have a `dateTimeLogicalType` knob (I'd half-remembered it from a
+  different plugin/fork). Decompiled `AvroExtension` from the jar
+  to be sure: it exposes `stringType`,
+  `isEnableDecimalLogicalType`, visibility, and a few conversion
+  hooks — nothing for date/time. Turns out it doesn't need one:
+  Avro 1.11's `SpecificCompiler` already generates
+  `java.time.Instant` for `timestamp-micros` by default. Verified
+  by grepping the generated class — `private java.time.Instant
+  occurredAt` and `private java.math.BigDecimal amount`, which is
+  exactly the mapping ADR-0004 wants.
+- `stringType.set("String")` matters more than it looks. Without
+  it the generated record uses `CharSequence`/`Utf8`, and `Utf8`
+  in `equals()` is a classic source of "why isn't this record
+  equal to itself after a round trip" confusion. Set it once,
+  ergonomics stay sane.
+
+Scope call recorded for ADR-0009: only `PaymentAuthorized` is
+modelled. The Phase 1 outbox routes six other non-refund event
+types to `reconcile.authorization.v1` via
+`DomainEvent.aggregateType()` defaulting to `"authorization"`.
+Modelling all of them this phase would be surface for no extra
+signal — the evolution scenarios in Feature 05 prove the pattern
+on one record type and that's the portfolio point. The other types
+are explicitly deferred, not forgotten.
+
+v1 ships all-required, zero defaults. Feature 05's "remove a
+defaulted field" scenario does add-then-remove inside its own test
+schemas rather than v1 carrying a speculative field it doesn't
+need. A schema-shape test locks that contract so a future "just
+add a nullable field here" slips loudly in review instead of
+quietly onto the wire.
