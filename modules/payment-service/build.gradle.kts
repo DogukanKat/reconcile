@@ -12,11 +12,14 @@ dependencies {
     implementation(libs.postgres.jdbc)
     implementation(libs.flyway.core)
     implementation(libs.flyway.database.postgresql)
+    implementation(project(":modules:shared-events"))
+    implementation(libs.kafka.avro.serializer)
     runtimeOnly(libs.micrometer.registry.prometheus)
 
     testImplementation(libs.bundles.test)
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.archunit.junit5)
+    testImplementation(libs.kafka.schema.registry.client)
 }
 
 tasks.test {

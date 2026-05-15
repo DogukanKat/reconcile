@@ -525,3 +525,77 @@ schemas rather than v1 carrying a speculative field it doesn't
 need. A schema-shape test locks that contract so a future "just
 add a nullable field here" slips loudly in review instead of
 quietly onto the wire.
+
+## 2026-05-15 — Option C and the ByteArrayConverter STRUCT wall
+
+This is the entry the decomposition predicted would be the most
+honest of the phase. It was right.
+
+Option C in theory: app serializes Confluent-framed Avro into a
+BYTEA outbox column, Debezium reads the bytes, `ByteArrayConverter`
+passes them through untouched. The producer side went in cleanly —
+`KafkaAvroSerializer` with the `shared-events` record, schema
+auto-registers under `reconcile.authorization.v1-value`, the unit
+tests round-trip through a `MockSchemaRegistryClient`, the
+schema-equality IT proves the registered schema is byte-for-byte
+the `shared-events` contract (Option A's failure mode avoided).
+
+Then I re-registered the connector and the task died:
+
+```
+DataException: Invalid schema type for ByteArrayConverter: STRUCT
+```
+
+The trap: Debezium's `EventRouter` SMT does not hand the converter
+the raw payload column. It hands it a Connect value whose *type*
+depends on what's placed in the "envelope". The Phase 2 connector
+had `occurred_at:envelope`, which tells EventRouter to build a
+STRUCT wrapping the payload plus `occurred_at`. `JsonConverter`
+serializes a STRUCT fine, so Phase 1/2 never noticed.
+`ByteArrayConverter` only accepts `BYTES`/`null` — a STRUCT is an
+instant `DataException`, and the schema-registration IT still
+*passed* because the serializer registers the schema in-process at
+`OutboxWriter` time, long before Debezium ever reads the row. So
+"schema is registered" proved nothing about delivery. The IT that
+actually consumed off the topic was the one telling the truth, and
+it was red.
+
+Fix: move every additional field off the envelope and onto headers
+(`occurred_at:header:occurredAt`, alongside the `eventType` and
+`correlationId` headers that were already there). With nothing in
+the envelope, EventRouter emits the payload column value *directly*
+as the message value — raw BYTEA bytes — and `ByteArrayConverter`
+is happy. `occurredAt` was redundant on the envelope anyway; it's
+a field inside the Avro body. One line of connector JSON; an hour
+to understand why.
+
+Two lessons worth keeping:
+
+- A passing test can be a liar if it asserts on the wrong side of
+  the boundary. "Schema registered" is producer-side and proved
+  nothing about CDC delivery. Only the consume-off-the-topic
+  assertion caught the broken connector. This is the same lesson
+  as the Phase 2 `@DltHandler` bug, hit from the opposite
+  direction — assert on the side the user sees.
+- A `RUNNING` connector with a `FAILED` task reports
+  `connector.state = RUNNING`. Always look at `.tasks[].state`,
+  not just the connector. The status endpoint will cheerfully
+  tell you everything is fine while nothing is flowing.
+
+notification-service: nothing in its suite broke, against the
+decomposition's expectation that consumer ITs would go red. The
+reason is honest and worth recording — there is no automated
+cross-service IT where notification-service consumes a real
+payment-service event. `PoisonMessageIT` publishes its own raw
+messages; the listener logs the payload as an opaque string and no
+test asserts on its content. So the Avro-on-the-wire change is
+invisible to the consumer's tests. It is *not* invisible
+operationally — a real `PaymentAuthorized` now logs as Avro
+mojibake on the consumer until Feature 04 teaches it to
+deserialize. That's the expected interim state; it's just that no
+test encodes it, which is itself a gap Feature 04 should close.
+
+Also re-learned the stale-`build/` duplicate-class trap from Phase
+2: heavy `--rerun-tasks` cycling leaves `AvroProducerEndToEndIT 2`
+ghosts in `build/classes`. `./gradlew clean` once; don't trust an
+incremental `check` after a day of rerun churn.

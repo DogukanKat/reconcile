@@ -24,7 +24,7 @@ public class OutboxRepository {
                           (id, aggregatetype, aggregateid, type, payload, occurred_at,
                            correlation_id)
                         VALUES (:id, :aggregateType, :aggregateId, :eventType,
-                                CAST(:payload AS JSONB), :occurredAt, :correlationId)
+                                :payload, :occurredAt, :correlationId)
                         """)
                 .param("id", entry.id())
                 .param("aggregateType", entry.aggregateType())
@@ -51,7 +51,7 @@ public class OutboxRepository {
                         rs.getString("aggregatetype"),
                         rs.getObject("aggregateid", UUID.class),
                         rs.getString("type"),
-                        rs.getString("payload"),
+                        rs.getBytes("payload"),
                         rs.getTimestamp("occurred_at").toInstant(),
                         rs.getString("correlation_id")))
                 .list();
