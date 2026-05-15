@@ -449,3 +449,42 @@ The fix is one line on the builder. The bug is one PR. The lesson
 — that integration tests need to assert on the side of the
 boundary the user sees, not just on what gets written across it —
 is the load-bearing part.
+
+## 2026-05-15 — Phase 3 begins: Schema Registry container
+
+`cp-schema-registry:7.8.0` against `apache/kafka:3.9.0` KRaft — no
+friction. The registry treats Kafka as a plain backing log over
+the standard producer/consumer protocol, so the
+Confluent-image-vs-apache-broker mismatch people warn about didn't
+bite. Pinned 7.8.x because Confluent Platform 7.8 tracks the
+Kafka 3.8/3.9 line; 7.9 would also work but 7.8 is the more
+battle-tested tag right now.
+
+Two small decisions worth recording:
+
+- **Host port 8085, not the Confluent default 8081.**
+  notification-service's actuator binds 8081 on the host during
+  local bootRun (Phase 2, Feature 06). A developer running the
+  consumer and the registry at once would collide. Inside the
+  docker network the registry still listens on the conventional
+  8081, so `http://schema-registry:8081` is what Debezium will use
+  in Feature 03 — only the host mapping moved.
+
+- **Fixed a latent Makefile bug while I was in there.** The
+  `register-connector` target's update path used
+  `--data @<(jq ...)` — bash process substitution. `make` runs
+  recipes under `/bin/sh` (dash on this box), which doesn't
+  support `<(...)`, so the PUT fallback always failed with
+  "option --data: error encountered when reading a file". The
+  POST path worked, so this only ever surfaced on the *second*
+  `make register-connector` (when the connector already exists
+  and the idempotent PUT kicks in). Replaced the process
+  substitution with a plain `jq ... | curl --data @-` pipe.
+  Pre-existing, not introduced by Phase 3; fixed here because
+  Feature 01 already touches the Makefile and the feature's DoD
+  is "register-connector still works."
+
+The registry is infra-only. Nothing Java changed; the full Phase
+1/2 suite (120 tests including the live-Kafka PoisonMessageIT) is
+green against the now-four-service stack, which is the only thing
+this feature had to prove.

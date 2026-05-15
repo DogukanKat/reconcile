@@ -72,6 +72,42 @@ services:
     networks:
       - reconcile-net
 
+  schema-registry:
+    # Confluent Platform 7.8.x is built against the Kafka 3.8/3.9 line.
+    # The registry only uses Kafka as a backing log over the standard
+    # producer/consumer protocol, so it runs cleanly against the
+    # apache/kafka:3.9.0 KRaft broker above.
+    image: confluentinc/cp-schema-registry:7.8.0
+    container_name: reconcile-schema-registry
+    # Host 8085, not the Confluent default 8081 — notification-service's
+    # actuator binds 8081 on the host during local bootRun, and a
+    # developer running both at once would collide. Inside the docker
+    # network the registry still listens on 8081
+    # (http://schema-registry:8081 for Debezium and any container).
+    ports:
+      - "8085:8081"
+    depends_on:
+      - kafka
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      # In-network PLAINTEXT listener, the same one Debezium uses. The
+      # host EXTERNAL listener (localhost:9094) is unreachable from
+      # inside the compose network, so the registry must use kafka:9092.
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "PLAINTEXT://kafka:9092"
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+      # Confluent's own default. The real BACKWARD-vs-FULL decision is
+      # ADR-0009 (Feature 06); setting it explicitly here keeps the
+      # global default visible. The evolution tests override per-subject
+      # rather than depend on this value.
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: backward
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - reconcile-net
+
 networks:
   reconcile-net:
 
