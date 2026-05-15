@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -39,7 +40,11 @@ class OutboxRepositoryIT {
                 "authorization",
                 aggregateId,
                 "PaymentAuthorized",
-                "{\"foo\":\"bar\"}",
+                // Opaque bytes since Phase 3 — the repository is
+                // format-agnostic, so a non-UTF-8 byte sequence
+                // (here a stand-in for Confluent-framed Avro:
+                // magic byte 0x00 + body) round-trips intact.
+                new byte[] {0x00, 0x00, 0x00, 0x01, 0x42},
                 Instant.parse("2026-05-12T10:00:00Z"),
                 "corr-abc");
 
@@ -51,7 +56,8 @@ class OutboxRepositoryIT {
         assertThat(roundTripped.id()).isEqualTo(entry.id());
         assertThat(roundTripped.aggregateType()).isEqualTo("authorization");
         assertThat(roundTripped.eventType()).isEqualTo("PaymentAuthorized");
-        assertThat(roundTripped.payload()).contains("\"foo\"");
+        assertThat(roundTripped.payload())
+                .containsExactly(0x00, 0x00, 0x00, 0x01, 0x42);
         assertThat(roundTripped.occurredAt()).isEqualTo(entry.occurredAt());
         assertThat(roundTripped.correlationId()).isEqualTo("corr-abc");
     }
@@ -64,7 +70,7 @@ class OutboxRepositoryIT {
                 "authorization",
                 aggregateId,
                 "AuthorizationExpired",
-                "{}",
+                "{}".getBytes(StandardCharsets.UTF_8),
                 Instant.parse("2026-05-12T10:00:00Z"),
                 null);
 
@@ -110,7 +116,7 @@ class OutboxRepositoryIT {
                 "authorization",
                 aggregateId,
                 type,
-                "{}",
+                "{}".getBytes(StandardCharsets.UTF_8),
                 occurredAt,
                 null);
     }

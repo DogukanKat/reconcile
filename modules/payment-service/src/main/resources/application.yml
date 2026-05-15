@@ -16,6 +16,14 @@ spring:
   flyway:
     enabled: true
 
+reconcile:
+  # payment-service runs on the host via bootRun, so it reaches the
+  # Schema Registry through the host port mapping (8085), not the
+  # in-network 8081. A containerised deploy would override this with
+  # http://schema-registry:8081.
+  schema-registry:
+    url: http://localhost:8085
+
 server:
   port: 8080
 

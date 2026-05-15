@@ -7,6 +7,10 @@ allprojects {
 
     repositories {
         mavenCentral()
+        // Confluent's kafka-avro-serializer and schema-registry-client
+        // are not on Maven Central. Phase 3 (Avro on the wire) needs
+        // them; nothing earlier did.
+        maven { url = uri("https://packages.confluent.io/maven/") }
     }
 }
 
